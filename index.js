@@ -9,17 +9,41 @@ import * as youtubeSearch from "youtube-search-without-api-key"
 // ====================
 // CONFIG
 // ====================
+// ====================
+// IMPORTS
+// ====================
+import makeWASocket, {
+  DisconnectReason,
+  useMultiFileAuthState
+} from "@whiskeysockets/baileys"
+
+import P from "pino"
+import qrcode from "qrcode-terminal"
+import fs from "fs"
+
+// ====================
+// CONFIG
+// ====================
 const PREFIXES = [".", "#"]
 const DB_FILE = "./economy.json"
-const OWNER = "56985529966@s.whatsapp.net"
 
 // ====================
-// ECONOMÍA SIMPLE
+// ECONOMÍA
 // ====================
-if (!fs.existsSync(DB_FILE)) fs.writeJsonSync(DB_FILE, {})
+if (!fs.existsSync(DB_FILE)) {
+  fs.writeFileSync(DB_FILE, JSON.stringify({}))
+}
+
+function loadDB() {
+  return JSON.parse(fs.readFileSync(DB_FILE, "utf-8"))
+}
+
+function saveDB(db) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2))
+}
 
 function getUser(db, id) {
-  if (!db[id]) db[id] = { dinero: 1000, ultimoTrabajo: 0, ultimoMinado: 0 }
+  if (!db[id]) db[id] = { money: 0 }
   return db[id]
 }
 
@@ -28,24 +52,42 @@ function getUser(db, id) {
 // ====================
 async function startBot() {
   console.log(">>> startBot() iniciado")
-  const { state, saveCreds } = await useMultiFileAuthState("./auth")
+
+  const { state, saveCreds } = await useMultiFileAuthState("./session")
   console.log(">>> auth state cargado")
 
-  const sock = makeWASocket({ logger: P({ level: "silent" }), auth: state })
+  const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
+    logger: P({ level: "silent" })
+  })
+
   console.log(">>> socket creado")
 
   sock.ev.on("creds.update", saveCreds)
 
   sock.ev.on("connection.update", (update) => {
-    const { connection, qr, lastDisconnect } = update
+    const { connection, lastDisconnect, qr } = update
+
     if (qr) {
-      console.log("📱 Escanea este QR con WhatsApp:")
+      console.log("📱 Escanea el QR")
       qrcode.generate(qr, { small: true })
     }
-    if (connection === "open") console.log("✅ Bot conectado")
+
     if (connection === "close") {
-      console.log("❌ Conexión cerrada")
-      console.log("💥 lastDisconnect:", lastDisconnect)
+      const reason = lastDisconnect?.error?.output?.statusCode
+      console.log("❌ Conexión cerrada:", reason)
+
+      if (reason !== DisconnectReason.loggedOut) {
+        console.log("🔄 Reintentando en 5s...")
+        setTimeout(startBot, 5000)
+      } else {
+        console.log("🚪 Sesión cerrada, borra ./session")
+      }
+    }
+
+    if (connection === "open") {
+      console.log("✅ BOT CONECTADO")
     }
   })
 
@@ -53,143 +95,66 @@ async function startBot() {
   // MENSAJES
   // ====================
   sock.ev.on("messages.upsert", async ({ messages }) => {
-    const m = messages[0]
-    if (!m.message) return
-    const from = m.key.remoteJid
-    const isGroup = from.endsWith("@g.us")
-    const sender = isGroup ? m.key.participant : from
-    const texto = m.message.conversation || m.message.extendedTextMessage?.text || ""
-    if (!PREFIXES.some(p => texto.startsWith(p))) return
+    const msg = messages[0]
+    if (!msg.message || msg.key.fromMe) return
 
-    const prefijo = PREFIXES.find(p => texto.startsWith(p))
-    const comando = texto.slice(prefijo.length).split(" ")[0].toLowerCase()
-    const args = texto.slice(prefijo.length).trim().split(" ").slice(1)
+    const from = msg.key.remoteJid
+    const text =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text
+
+    if (!text) return
+
+    const prefix = PREFIXES.find(p => text.startsWith(p))
+    if (!prefix) return
+
+    const args = text.slice(prefix.length).trim().split(/ +/)
+    const cmd = args.shift().toLowerCase()
+
+    const db = loadDB()
+    const user = getUser(db, from)
 
     // ====================
-    // ECONOMÍA
+    // COMANDOS
     // ====================
-    const db = fs.readJsonSync(DB_FILE)
-    const user = getUser(db, sender)
+    if (cmd === "ping") {
+      await sock.sendMessage(from, { text: "🏓 pong" })
+    }
 
-    if (["trabajar", "work"].includes(comando)) {
-      const ahora = Date.now()
-      if (ahora - user.ultimoTrabajo < 3 * 60 * 1000) {
-        return sock.sendMessage(from, { text: "⏳ Espera 3 minutos para volver a trabajar." })
+    if (cmd === "money") {
+      await sock.sendMessage(from, {
+        text: `💰 Dinero: ${user.money}`
+      })
+    }
+
+    if (cmd === "work") {
+      const earn = Math.floor(Math.random() * 50) + 10
+      user.money += earn
+      saveDB(db)
+
+      await sock.sendMessage(from, {
+        text: `🛠️ Trabajaste y ganaste ${earn}`
+      })
+    }
+
+    if (cmd === "give") {
+      const amount = parseInt(args[0])
+      if (isNaN(amount)) {
+        return sock.sendMessage(from, { text: "❌ Monto inválido" })
       }
-      const ganancia = Math.floor(Math.random() * 300) + 200
-      user.dinero += ganancia
-      user.ultimoTrabajo = ahora
-      fs.writeJsonSync(DB_FILE, db)
-      return sock.sendMessage(from, { text: `💼 Trabajaste y ganaste ${ganancia} monedas.` })
-    }
 
-    if (["minar", "mine"].includes(comando)) {
-      const ahora = Date.now()
-      if (ahora - user.ultimoMinado < 15 * 60 * 1000) {
-        return sock.sendMessage(from, { text: "⛏️ Espera 15 minutos para volver a minar." })
-      }
-      const ganancia = Math.floor(Math.random() * 2000)
-      user.dinero += ganancia
-      user.ultimoMinado = ahora
-      fs.writeJsonSync(DB_FILE, db)
-      return sock.sendMessage(from, { text: `⛏️ Minaste y obtuviste ${ganancia} monedas.` })
-    }
+      user.money += amount
+      saveDB(db)
 
-    if (["caja", "box"].includes(comando)) {
-      return sock.sendMessage(from, { text: "📦 Caja misteriosa ($500). Usa .caja_abrir" })
-    }
-
-    if (["caja_abrir", "box_open"].includes(comando)) {
-      const precio = 500
-      if (user.dinero < precio) return sock.sendMessage(from, { text: "❌ No tienes suficiente dinero." })
-      user.dinero -= precio
-      const premio = Math.floor(Math.random() * 900)
-      if (premio < 500) {
-        fs.writeJsonSync(DB_FILE, db)
-        return sock.sendMessage(from, { text: `📦 Perdiste dinero (${premio} monedas 😭)` })
-      }
-      user.dinero += premio
-      fs.writeJsonSync(DB_FILE, db)
-      return sock.sendMessage(from, { text: `🎉 ¡Ganaste ${premio} monedas!` })
-    }
-
-    if (comando === "blackjack") {
-      const apuesta = Number(args[0])
-      if (!apuesta || apuesta <= 0) return sock.sendMessage(from, { text: "♠️ Usa: .blackjack <cantidad>" })
-      if (user.dinero < apuesta) return sock.sendMessage(from, { text: "❌ No tienes suficiente dinero." })
-
-      const bot = Math.floor(Math.random() * 21) + 1
-      const jugador = Math.floor(Math.random() * 21) + 1
-      if (jugador > bot) user.dinero += apuesta
-      else user.dinero -= apuesta
-      fs.writeJsonSync(DB_FILE, db)
-      return sock.sendMessage(from, { text: `🃏 ${jugador > bot ? "Ganaste" : "Perdiste"} (${jugador} vs ${bot}) ${jugador > bot ? "+" : "-"}${apuesta}` })
-    }
-
-    // ====================
-    // UTILIDADES
-    // ====================
-    if (comando === "menu") {
-      return sock.sendMessage(from, { text: `📜 MENÚ
-💰 Dinero: ${user.dinero}
-
-💲 ECONOMÍA
-.trabajar / #work
-.minar / #mine
-.caja / #box
-.caja_abrir / #box_open
-.blackjack <cantidad>
-
-🛠 UTILIDADES
-.menu
-.ping
-.etiquetar
-.grupoinfo
-
-👤 ADMINS
-.antilink (on/off)
-.permitirlink @usuario (usos) (tiempo)` })
-    }
-
-    if (comando === "ping") {
-      const inicio = Date.now()
-      await sock.sendMessage(from, { text: "🏓 Pong..." })
-      const ping = Date.now() - inicio
-      return sock.sendMessage(from, { text: `🏓 Pong!\n📡 Ping: ${ping} ms` })
-    }
-
-    if (comando === "etiquetar" && isGroup) {
-      const metadata = await sock.groupMetadata(from)
-      const participantes = metadata.participants.map(p => p.id)
-      const mensaje = "📢 Etiquetando a todos:\n" + participantes.map(p => `@${p.split("@")[0]}`).join(" ")
-      return sock.sendMessage(from, { text: mensaje, mentions: participantes })
-    }
-
-    if (comando === "grupoinfo" && isGroup) {
-      const metadata = await sock.groupMetadata(from)
-      const admins = metadata.participants.filter(p => p.admin || p.superAdmin).length
-      return sock.sendMessage(from, { text: `📋 Grupo: ${metadata.subject}\n👥 Miembros: ${metadata.participants.length}\n⭐ Admins: ${admins}\n📝 Descripción: ${metadata.desc || "Sin descripción"}` })
-    }
-
-    // ====================
-    // MEDIA
-    // ====================
-    if (comando === "ytaudiosearch" && args.length > 0) {
-      const query = args.join(" ")
-      const results = await youtubeSearch.search(query)
-      if (!results || results.length === 0) return sock.sendMessage(from, { text: "❌ No se encontraron resultados." })
-      const video = results[0]
-      return sock.sendMessage(from, { text: `🎵 ${video.title}\n${video.url}` })
-    }
-
-    if (comando === "toimg") {
-      const media = m.message.imageMessage || m.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage
-      if (!media) return sock.sendMessage(from, { text: "❌ Responde a una imagen para convertirla." })
-      const buffer = Buffer.from(media.data, "base64")
-      const webpBuffer = await sharp(buffer).webp().toBuffer()
-      await sock.sendMessage(from, { sticker: { url: webpBuffer } })
+      await sock.sendMessage(from, {
+        text: `➕ Recibiste ${amount}`
+      })
     }
   })
 }
 
+// ====================
+// START
+// ====================
+console.log(">>> index.js SE ESTÁ EJECUTANDO")
 startBot()
