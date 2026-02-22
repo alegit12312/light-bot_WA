@@ -1,0 +1,80 @@
+{
+  "users": {
+    "271064663892130@lid": {
+      "money": "1460",
+      "vip": false,
+      "cmdDay": "2026-02-02",
+      "cmdCount": 5
+    },
+    "999@s.whatsapp.net": {
+      "money": "18092682321",
+      "vip": false
+    },
+    "18092681321@s.whatsapp.net": {
+      "money": "1000000000000000000000001998",
+      "vip": false
+    },
+    "18094215906@s.whatsapp.net": {
+      "money": "1010",
+      "vip": false
+    },
+    "56985529966@s.whatsapp.net": {
+      "money": "100000000000000000999",
+      "vip": false
+    },
+    "105845392162971@lid": {
+      "money": "1002756",
+      "cmdDay": "2026-02-02",
+      "cmdCount": 16,
+      "lastWork": 1769998327458
+    },
+    "273598157717649@lid": {
+      "money": "22006651",
+      "cmdDay": "2026-02-02",
+      "cmdCount": 75,
+      "lastWork": 1770001484742
+    },
+    "191504136036373@lid": {
+      "money": "2021615",
+      "cmdDay": "2026-02-02",
+      "cmdCount": 58,
+      "lastWork": 1769994991454
+    },
+    "93699610562573@lid": {
+      "money": "3507",
+      "lastWork": 1770000605737,
+      "cmdCount": 8,
+      "cmdDay": "2026-02-02"
+    },
+    "189730801086585@lid": {
+      "money": "1000",
+      "lastWork": 0,
+      "cmdCount": 1,
+      "cmdDay": "2026-02-02"
+    },
+    "95164227965129@lid": {
+      "money": "2323",
+      "lastWork": 1770000520809,
+      "cmdCount": 2,
+      "cmdDay": "2026-02-02"
+    },
+    "42825555173454@lid": {
+      "money": "2096",
+      "lastWork": 1770000665735,
+      "cmdCount": 2,
+      "cmdDay": "2026-02-02"
+    },
+    "183717863657500@lid": {
+      "money": "1000",
+      "lastWork": 0,
+      "cmdCount": 1,
+      "cmdDay": "2026-02-02"
+    },
+    "82627268763822@lid": {
+      "money": "1000",
+      "lastWork": 0,
+      "cmdCount": 2,
+      "cmdDay": "2026-02-02"
+    }
+  }
+}
